@@ -10,7 +10,19 @@ dotenv.config();
 const { S3_USER_CLIENT, S3_USER_SECRET, S3_BUCKET_NAME, S3_REGION } =
   process.env;
 
-if (!S3_USER_CLIENT || !S3_USER_SECRET || !S3_BUCKET_NAME || !S3_REGION) {
+if (!S3_USER_SECRET) {
+  throw new Error("Missing required S3 environment variables");
+}
+
+if (!S3_USER_CLIENT) {
+  throw new Error("Missing required S3 environment variables");
+}
+
+if (!S3_REGION) {
+  throw new Error("Missing required S3 environment variables");
+}
+
+if (!S3_BUCKET_NAME) {
   throw new Error("Missing required S3 environment variables");
 }
 
@@ -69,9 +81,9 @@ const UploasdTshirt = async (
 ): Promise<void> => {
   const response = await uploadFile(
     fileStream,
-    "tshirts",
+    t_shirt_name,
     S3_BUCKET_NAME,
-    t_shirt_name
+    "tshirts"
   );
 };
 
