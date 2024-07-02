@@ -1,15 +1,17 @@
 import mongoose, { Document, Schema, Model } from "mongoose";
 import Redis, { RedisClientType, createClient } from "redis";
 import { promisify } from "util";
+import dotenv from "dotenv";
 
-// Define UserDocument and UserModel
+dotenv.config();
+
 export interface UserDocument extends Document {
-  username: string;
+  email: string;
   password: string;
 }
 
 const userSchema = new Schema<UserDocument>({
-  username: { type: String, required: true, unique: true },
+  email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
 });
 
@@ -18,84 +20,90 @@ export const UserModel: Model<UserDocument> = mongoose.model(
   userSchema
 );
 
-// Define interfaces for AuthDB and TokenDB
 interface IAuthDB {
-  register_user(username: string, password: string): Promise<void>;
-  login_user(username: string, password: string): Promise<void>;
-  disconnect(): Promise<void>;
+  register_user(email: string, password: string): Promise<UserDocument | null>;
+  login_user(email: string, password: string): Promise<UserDocument | null>;
+  disconnect(): Promise<string>;
 }
 
 class AuthDB implements IAuthDB {
   private dbUri: string;
-  private connection: mongoose.Connection;
-
+  private connection;
   constructor(dbUri: string) {
     this.dbUri = dbUri;
-    this.connection = mongoose.createConnection(this.dbUri);
+    this.connection = mongoose.connect(this.dbUri);
   }
 
-  async register_user(username: string, password: string): Promise<void> {
+  async register_user(
+    email: string,
+    password: string
+  ): Promise<UserDocument | null> {
     try {
-      await UserModel.create({ username, password });
+      const user = await UserModel.create({ email, password });
+      return user;
     } catch (error) {
       console.error("Error registering user:", error);
-      throw error;
+      return null;
     }
   }
 
-  async login_user(username: string, password: string): Promise<void> {
+  async login_user(
+    email: string,
+    password: string
+  ): Promise<UserDocument | null> {
     try {
-      const user = await UserModel.findOne({ username, password }).exec();
+      const user = await UserModel.findOne({ email, password }).exec();
       if (!user) {
         throw new Error("User not found or invalid credentials");
       }
-      // Perform login logic here
+      return user;
     } catch (error) {
       console.error("Error logging in user:", error);
-      throw error;
+      return null;
     }
   }
 
-  async disconnect(): Promise<void> {
+  async disconnect(): Promise<string> {
     try {
       await this.connection.close();
-      console.log("Disconnected from MongoDB");
+      return "Disconnected from MongoDB";
     } catch (error) {
       console.error("Error disconnecting from MongoDB:", error);
-      throw error;
+      return "Error disconnecting from MongoDB";
     }
   }
 }
 
 interface ITokenDB {
-  issue_token(username: string): Promise<{ token: string }>;
+  issue_token(email: string): Promise<{ token: string }>;
   getUser(token: string): Promise<any>;
-  check_token(username: string): Promise<boolean>;
+  check_token(email: string): Promise<boolean>;
 }
 
 class TokenDB implements ITokenDB {
   client: RedisClientType;
   constructor(url: string) {
-    this.client = Redis.createClient({ url: url });
+    this.client = createClient({ url: url });
+    this.client.connect().catch(console.error);
   }
 
-  async issue_token(username: string): Promise<{ token: string }> {
+  async issue_token(email: string): Promise<{ token: string }> {
     const token = this.generateToken();
-    await this.client.set(username, token);
+    await this.client.set(email, token);
     return { token };
   }
 
   async getUser(token: string): Promise<any> {
-    const username = await this.client.get(token);
-    if (!username) {
+    const email = await this.client.get(token);
+    if (!email) {
       throw new Error("Token not found");
     }
     const userData = {}; // Placeholder, you should implement logic to retrieve user data
     return userData;
   }
 
-  async check_token(username: string): Promise<boolean> {
-    const token = await promisify(this.client.get).call(this.client, username);
+  async check_token(email: string): Promise<boolean> {
+    const token = await promisify(this.client.get).call(this.client, email);
     return !!token;
   }
 
@@ -106,10 +114,10 @@ class TokenDB implements ITokenDB {
 
 // Define AuthRepo and implement IAuthRepo
 interface IAuthRepo {
-  create_user(username: string, password: string): Promise<void>;
-  get_user(username: string, password: string): Promise<void>;
-  issue_token(username: string): Promise<{ token: string }>;
-  check_token(username: string): Promise<boolean>;
+  create_user(email: string, password: string): Promise<UserDocument | null>;
+  get_user(email: string, password: string): Promise<UserDocument | null>;
+  issue_token(email: string): Promise<{ token: string }>;
+  check_token(email: string): Promise<boolean>;
   getUser(token: string): Promise<any>;
 }
 
@@ -122,20 +130,26 @@ class AuthRepo implements IAuthRepo {
     this.tokenDB = tokenDB;
   }
 
-  async create_user(username: string, password: string): Promise<void> {
-    await this.authDB.register_user(username, password);
+  async create_user(
+    email: string,
+    password: string
+  ): Promise<UserDocument | null> {
+    return await this.authDB.register_user(email, password);
   }
 
-  async get_user(username: string, password: string): Promise<void> {
-    await this.authDB.login_user(username, password);
+  async get_user(
+    email: string,
+    password: string
+  ): Promise<UserDocument | null> {
+    return await this.authDB.login_user(email, password);
   }
 
-  async issue_token(username: string): Promise<{ token: string }> {
-    return await this.tokenDB.issue_token(username);
+  async issue_token(email: string): Promise<{ token: string }> {
+    return await this.tokenDB.issue_token(email);
   }
 
-  async check_token(username: string): Promise<boolean> {
-    return await this.tokenDB.check_token(username);
+  async check_token(email: string): Promise<boolean> {
+    return await this.tokenDB.check_token(email);
   }
 
   async getUser(token: string): Promise<any> {
