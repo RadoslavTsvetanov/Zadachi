@@ -25,8 +25,8 @@ type AdditionalPropertiesType = typeof additionalProperties;
 */
 
 type AdditionalPropertiesType = {
-  setError: (state: boolean) => void;
-  setLoading(value: boolean): void;
+  setError: (state: string) => void;
+  setLoading: (value: boolean) => void;
 };
 
 type ctxType = ExtendedCtx<AdditionalPropertiesType>;
@@ -34,10 +34,10 @@ export type pageProps = { ctx: ctxType };
 
 const MyApp: AppType<pageProps> = ({ Component, pageProps }) => {
   const [state, setState] = useState<boolean>(false);
-  const [isError, setError] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
   const full_ctx: ExtendedCtx<AdditionalPropertiesType> = {
     ...ctx,
-    setError: (state: boolean) => {
+    setError: (state: string) => {
       setError(state);
     },
     setLoading: (state: boolean) => {
@@ -45,8 +45,8 @@ const MyApp: AppType<pageProps> = ({ Component, pageProps }) => {
     },
   };
 
-  if (isError) {
-    return <ErrorComponent />;
+  if (error !== null) {
+    return <ErrorComponent errorMsg={error} />;
   }
 
   if (state) {
